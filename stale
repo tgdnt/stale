@@ -1,0 +1,97 @@
+#!/bin/bash
+
+## Stale todos storage file ##
+export STALE_PATH="$TODO_DIR"
+export STALE_FILE="stale.txt"
+export STALE_FULL_PATH="$STALE_PATH/$STALE_FILE"
+#export STALE_THRESHOLD="14d"
+
+## Display usage information ##
+function usage {
+	cat <<-END
+	
+		stale - Prune and manage your stale tasks
+			
+		Usage:
+		    stale ls
+		        List todos in $STALE_FILE
+				
+		    stale restore ITEM#
+		        Restore specified todo out of $STALE_FILE
+
+		    stale prune ITEM#
+		    	Move specified todo to $STALE_FILE
+
+		END
+	
+	exit 0
+}
+
+## Lists todos in stale.txt ##
+function listStaleTodos {
+	$TODO_FULL_SH listfile "$STALE_FULL_PATH"
+	
+	exit 0
+}
+
+## Moves todo from todo.txt into stale.txt ##
+function makeStale {
+	itemnum="$1"
+	getTodo "$itemnum" "$TODO_FILE"
+	cleanTodo=$(echo "$todo" | sed -E 's/x [0-9]{4}-[0-9]{2}-[0-9]{2} //')
+	if  [ $TODOTXT_FORCE = 0 ]; then
+		echo "Move '$todo' to $STALE_FILE? (y/n)"
+		read -e -r ANSWER
+	    else
+		ANSWER="y"
+	fi
+	if [ "$ANSWER" = "y" ]; then
+		echo "$todo" >> "$STALE_FULL_PATH"
+		if [ $TODOTXT_PRESERVE_LINE_NUMBERS = 0 ]; then
+		    # delete line (changes line numbers)
+		    sed -i.bak -e "${itemnum}s/^.*//" -e '/./!d' "$TODO_FILE"
+		else
+		    # leave blank line behind (preserves line numbers)
+		    sed -i.bak -e "${itemnum}s/^.*//" "$TODO_FILE"
+		fi
+	fi
+exit 0
+}
+
+## Moves todo from stale.txt back to todo.txt ##
+function restoreStaleTodo {
+	itemnum="$1"
+	getTodo "$itemnum" "$STALE_FULL_PATH"
+	cleanTodo=$(echo "$todo" | sed -E 's/x [0-9]{4}-[0-9]{2}-[0-9]{2} //')
+	$TODO_FULL_SH add "$cleanTodo"
+	if [ $TODOTXT_PRESERVE_LINE_NUMBERS = 0 ]; then
+                # delete line (changes line numbers)
+                sed -i.bak -e "${itemnum}s/^.*//" -e '/./!d' "$STALE_FULL_PATH"
+            else
+                # leave blank line behind (preserves line numbers)
+                sed -i.bak -e "${itemnum}s/^.*//" "$STALE_FULL_PATH"
+fi
+	exit 0
+}
+
+
+action=$1
+shift
+
+if [ "$1" = "usage" ]; then
+	usage
+fi
+
+if [ "$1" = "ls" ]; then
+ 	listStaleTodos
+elif [ "$1" = "restore" ] && [[ "$2" =~ [0-9]+ ]]; then
+	restoreStaleTodo "$2"
+elif [ "$1" = "prune" ] && [[ "$2" =~ [0-9]+ ]]; then
+	makeStale "$2"
+else
+	cat <<-EndShortUsage
+	$TODO_SH stale ls | List stale tasks
+	$TODO_SH stale prune ITEM# | Move item into $STALE_FILE
+	$TODO_SH stale restore ITEM# | Restore stale task
+	EndShortUsage
+fi
